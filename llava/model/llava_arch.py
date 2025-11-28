@@ -217,10 +217,17 @@ class LlavaMetaForCausalLM(ABC):
         else:
             image_features = []
 
-            for idx, feature in enumerate(selected_features[:-1]): 
+            for idx, feature in enumerate(selected_features[:-1]):
                 image_features.append(self.get_model().mm_projectors[idx](feature))
 
             image_features_f = self.get_model().mm_projector_f(selected_features[-1])
+
+            if self.config.layer_fusing_strategy == "I_C":
+                if len(image_features) == 0:
+                    return [image_features_f]
+                concat_features = torch.cat(image_features + [image_features_f], dim=1)
+                return [concat_features]
+
             image_features.append(image_features_f)
 
             return image_features
@@ -243,7 +250,7 @@ class LlavaMetaForCausalLM(ABC):
             if "E" in  self.config.layer_fusing_strategy:
                 image_features = self.encode_images(concat_images)
                 split_sizes = [image.shape[0] for image in images]
-            else:    
+            else:
                 image_features_list = self.encode_images(concat_images)
                 split_sizes = [image.shape[0] for image in images]
                 image_features = image_features_list[-1]

@@ -81,7 +81,10 @@ class ModelArguments:
     mm_vision_select_feature: Optional[str] = field(default="patch")
     n_queries: int = field(default=None)
     layer_using_strategy: Optional[str] = field(default=None)
-    layer_fusing_strategy: Optional[str] = field(default=None)
+    layer_fusing_strategy: Optional[str] = field(
+        default=None,
+        metadata={"help": "Fusion strategy to use (E_D, E_M, I_D, I_M, I_C)."}
+    )
 
 @dataclass
 class DataArguments:

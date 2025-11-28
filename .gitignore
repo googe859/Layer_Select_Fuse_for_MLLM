@@ -1,0 +1,15 @@
+# Generated artifacts / large checkpoints
+checkpoint/*
+!checkpoint/filter.py
+
+wandb/
+
+# Logs and run outputs
+*.log
+
+# Python cache & metadata
+__pycache__/
+*.egg-info/
+
+# Build artifacts from deformable attention ops
+llava/model/multimodal_projector/deformable_attention/ops/build/

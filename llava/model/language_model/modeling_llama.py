@@ -723,8 +723,10 @@ class LlamaDecoderLayer(nn.Module):
         self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.layer_using_strategy = config.layer_using_strategy    
-        self.layer_fusing_strategy = config.layer_fusing_strategy   
-        if "I" in self.layer_fusing_strategy:
+        self.layer_fusing_strategy = config.layer_fusing_strategy
+        if self.layer_fusing_strategy == "I_C":
+            self.has_cross = False   
+        elif "I" in self.layer_fusing_strategy:
             if self.layer_using_strategy == '18':
                 self.has_cross = layer_idx in [int(18*config.num_hidden_layers/24-1)]
             if self.layer_using_strategy == '3-18':
@@ -1010,6 +1012,7 @@ class LlamaModel(LlamaPreTrainedModel):
         super().__init__(config)
 
         self.layer_using_strategy = config.layer_using_strategy
+        self.layer_fusing_strategy = config.layer_fusing_strategy
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
@@ -1232,7 +1235,7 @@ class LlamaModel(LlamaPreTrainedModel):
                         use_cache=use_cache,
                     )    
 
-                elif self.layer_using_strategy == 'I_M':  
+                elif self.layer_fusing_strategy == 'I_M':  
                     layer_outputs = decoder_layer(
                             hidden_states,
                             image_token_mask = image_token_mask,

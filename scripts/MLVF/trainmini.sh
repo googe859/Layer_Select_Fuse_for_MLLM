@@ -1,7 +1,7 @@
 #!/bin/bash
 BASE_MODEL_NAME=test1
 # Define common variables
-FUSING_STRATEGY="I_D" # Options: E_D, E_M, I_D, I_M
+FUSING_STRATEGY="I_C" # Options: E_D, E_M, I_D, I_M,   
 USING_STRATEGY="3-18-23" # Options: 18, 3-18, 3-18-23, former, latter, all
 MODEL_NAME="siglip_14_665k" # Specific model name, {Vsiual Encoder}_{LLM size}_{data size}
 
@@ -55,7 +55,7 @@ deepspeed llava/train/train.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --model_max_length 2048 \
+    --model_max_length 768 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
@@ -83,8 +83,8 @@ deepspeed  llava/train/train.py \
     --output_dir ./checkpoint/${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME} \
     --num_train_epochs 1 \
     --per_device_train_batch_size 1 \
-    --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 16 \
+    --per_device_eval_batch_size 1\
+    --gradient_accumulation_steps 2 \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 1000 \
@@ -96,9 +96,10 @@ deepspeed  llava/train/train.py \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --model_max_length 2048 \
+    --model_max_length 768 \
     --gradient_checkpointing True \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
+    --lora_enable false \
     --wandb_name ${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME}
