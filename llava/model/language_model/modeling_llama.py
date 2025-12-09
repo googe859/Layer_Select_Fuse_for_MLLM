@@ -724,7 +724,7 @@ class LlamaDecoderLayer(nn.Module):
 
         self.layer_using_strategy = config.layer_using_strategy    
         self.layer_fusing_strategy = config.layer_fusing_strategy
-        if self.layer_fusing_strategy == "I_C":
+        if self.layer_fusing_strategy in ("I_C", "I_C_SUM"):
             self.has_cross = False   
         elif "I" in self.layer_fusing_strategy:
             if self.layer_using_strategy == '18':

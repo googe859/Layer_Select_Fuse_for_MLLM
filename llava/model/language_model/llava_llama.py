@@ -121,7 +121,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
 
 
             if images_features is None and image_features_list is not None:
-                if self.config.layer_fusing_strategy != "I_C":
+                if self.config.layer_fusing_strategy not in ("I_C", "I_C_SUM"):
                     images_features = image_features_list + [image_features_f]
                 else:
                     images_features = None

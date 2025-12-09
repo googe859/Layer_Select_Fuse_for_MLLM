@@ -222,9 +222,14 @@ class LlavaMetaForCausalLM(ABC):
 
             image_features_f = self.get_model().mm_projector_f(selected_features[-1])
 
-            if self.config.layer_fusing_strategy == "I_C":
+            if self.config.layer_fusing_strategy in ("I_C", "I_C_SUM"):
                 if len(image_features) == 0:
                     return [image_features_f]
+                if self.config.layer_fusing_strategy == "I_C_SUM":
+                    stacked = torch.stack(image_features, dim=0)
+                    fused_feature = torch.sum(stacked, dim=0)
+                    sum_feature = fused_feature + image_features_f
+                    return [sum_feature]
                 concat_features = torch.cat(image_features + [image_features_f], dim=1)
                 return [concat_features]
 

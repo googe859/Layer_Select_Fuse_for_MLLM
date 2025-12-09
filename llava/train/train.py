@@ -83,7 +83,7 @@ class ModelArguments:
     layer_using_strategy: Optional[str] = field(default=None)
     layer_fusing_strategy: Optional[str] = field(
         default=None,
-        metadata={"help": "Fusion strategy to use (E_D, E_M, I_D, I_M, I_C)."}
+        metadata={"help": "Fusion strategy to use (E_D, E_M, I_D, I_M, I_C, I_C_SUM)."}
     )
 
 @dataclass
