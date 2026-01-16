@@ -40,6 +40,10 @@ class LlavaMetaModel:
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(24)])
                 elif self.config.layer_using_strategy == '3-18-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
+                elif self.config.layer_using_strategy == '18-23':
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
+                elif self.config.layer_using_strategy == '23-23':
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '3-18':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
                 elif self.config.layer_using_strategy == '18':
@@ -100,6 +104,10 @@ class LlavaMetaModel:
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(24)])
                 elif self.config.layer_using_strategy == '3-18-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
+                elif self.config.layer_using_strategy == '18-23':
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
+                elif self.config.layer_using_strategy == '23-23':
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '3-18':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
                 elif self.config.layer_using_strategy == '18':
