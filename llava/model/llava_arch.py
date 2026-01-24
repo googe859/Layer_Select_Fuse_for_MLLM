@@ -41,7 +41,7 @@ class LlavaMetaModel:
                 elif self.config.layer_using_strategy == '3-18-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
                 elif self.config.layer_using_strategy == '18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '23-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '3-18':
@@ -105,7 +105,7 @@ class LlavaMetaModel:
                 elif self.config.layer_using_strategy == '3-18-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
                 elif self.config.layer_using_strategy == '18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '23-23':
                     self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
                 elif self.config.layer_using_strategy == '3-18':
@@ -200,9 +200,9 @@ class LlavaMetaForCausalLM(ABC):
             # Available at: https://arxiv.org/abs/2405.13800
             image_features = []
             image_features_2 = []
-            if self.config.layer_using_strategy == '18':
+            if self.config.layer_using_strategy in ('18', '18-23', '23-23'):
                 image_features_f = self.get_model().mm_projector_f(torch.cat([selected_features[0], selected_features[1]], dim=-1))
-            if self.config.layer_using_strategy == '3-18' or self.config.layer_using_strategy == '3-18-23':
+            if self.config.layer_using_strategy in ('3-18', '3-18-23'):
                 image_features_f = self.get_model().mm_projector_f(torch.cat([selected_features[0], selected_features[1],selected_features[2]], dim=-1))
             if self.config.layer_using_strategy == 'former' or self.config.layer_using_strategy == 'latter':
                 for i in range(0, 12):

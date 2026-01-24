@@ -581,18 +581,22 @@ class SigLipVisionTower(nn.Module):
     def feature_select(self, image_forward_outs):
   
         selected_features = []
-
-
-        # For siglip, we tested 3-18-23, latter, 18-23, and 23-23
-
-        if self.layer_using_strategy == '3-18-23':
+        # For siglip, we only tested 3-18-23 and the latter
+        if self.layer_using_strategy == '3-18':
+            select_layer = [3,20,25]   
+        elif self.layer_using_strategy == '3-18-23':
             select_layer = [3,20,25,25]    
-        if self.layer_using_strategy == 'latter':
+        elif self.layer_using_strategy == 'latter':
             select_layer = [15,16, 17, 18, 19, 20, 21, 22, 23, 24,25,26,25]
-        if self.layer_using_strategy == '18-23':
-            select_layer = [20, 25, 25]    # layer 18, 23 + final layer for mm_projector_f
-        if self.layer_using_strategy == '23-23':
+        elif self.layer_using_strategy == '18-23':
+            select_layer = [20, 25]    # layer 18, 23 + final layer for mm_projector_f
+        elif self.layer_using_strategy == '23-23':
             select_layer = [25, 25]        # layer 23 + final layer for mm_projector_f
+        elif self.layer_using_strategy == 'baseline18':
+            select_layer = [20]        # 单层 baseline：使用第 20 层（对应 CLIP 第 18 层）
+        else:
+        # baseline：仅使用命令行指定的单层
+            select_layer = [25]
 
 
 

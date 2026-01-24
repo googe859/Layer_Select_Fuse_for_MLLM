@@ -40,17 +40,19 @@ class CLIPVisionTower(nn.Module):
         selected_features = []
         if self.layer_using_strategy == '18':
             select_layer = [18,23]
-        if self.layer_using_strategy == '3-18':
+        elif self.layer_using_strategy == '3-18':
             select_layer = [3,18,23]    
-        if self.layer_using_strategy == '3-18-23':
+        elif self.layer_using_strategy == '3-18-23':
             select_layer = [3,18,23,23]
-        if self.layer_using_strategy == 'former':                 
+        elif self.layer_using_strategy == 'former':                 
             select_layer = [1,2,3,4,5,6,7,8,9,10,11,12,23]
-        if self.layer_using_strategy == 'latter':
+        elif self.layer_using_strategy == 'latter':
             select_layer = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,23]
-        if self.layer_using_strategy == 'all':
+        elif self.layer_using_strategy == 'all':
             select_layer = [1,2,3,4,5,6,7,8,9,10,11,12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,23]
-
+        else:
+        # baseline：仅使用命令行指定的单层
+            select_layer = [23]
         for layer_index in select_layer:
             layer_features = image_forward_outs.hidden_states[layer_index]
             if self.select_feature == 'patch':
