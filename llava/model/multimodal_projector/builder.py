@@ -5,6 +5,7 @@ import re
 
 from functools import partial
 from .ms_cross_attn import MSCrossAttnBlock
+from ..multimodal_encoder.layer_select import parse_layer_using_strategy
 import torch
 import torch.nn as nn
 from einops import rearrange
@@ -84,7 +85,15 @@ class SimpleResBlock(nn.Module):
 def build_vision_projector(config, vision_tower, delay_load=False, **kwargs):
     projector_type = getattr(config, 'mm_projector_type', 'linear')
     mlp_depth = 2
+    parsed_using = parse_layer_using_strategy(getattr(config, 'layer_using_strategy', None))
     if config.layer_fusing_strategy =='E_D':
+        if parsed_using is not None:
+            n_layers = len(parsed_using)
+            modules = [nn.Linear(config.mm_hidden_size * n_layers, config.hidden_size)]
+            for _ in range(1, mlp_depth):
+                modules.append(nn.GELU())
+                modules.append(nn.Linear(config.hidden_size, config.hidden_size))
+            return nn.Sequential(*modules)
         if config.layer_using_strategy == '18' or config.layer_using_strategy == 'former' or config.layer_using_strategy == 'latter':
             modules = [nn.Linear(config.mm_hidden_size*2, config.hidden_size)]
             for _ in range(1, mlp_depth):
@@ -108,16 +117,22 @@ def build_vision_projector(config, vision_tower, delay_load=False, **kwargs):
         # arXiv preprint arXiv:2410.11829. 
         # Available at: https://arxiv.org/abs/2410.11829
 
-        if config.layer_using_strategy == '18':
-            modules = [MSCrossAttnBlock(n_levels=1,d_model=config.mm_hidden_size)]
-        if config.layer_using_strategy == '3-18-23':
-            modules = [MSCrossAttnBlock(n_levels=2,d_model=config.mm_hidden_size)]
-        if config.layer_using_strategy == 'former' or config.layer_using_strategy == 'latter':
-            modules = [MSCrossAttnBlock(n_levels=12,d_model=config.mm_hidden_size)]   
-        if config.layer_using_strategy == 'all':
-            modules = [MSCrossAttnBlock(n_levels=24,d_model=config.mm_hidden_size)]   
-        if  config.layer_using_strategy == '3-18': 
-            return  # 3-18 and 3-18-23 are consistent in External fusion
+        if parsed_using is not None:
+            n_levels = max(len(parsed_using) - 1, 1)
+            modules = [MSCrossAttnBlock(n_levels=n_levels, d_model=config.mm_hidden_size)]
+        elif config.layer_using_strategy == '18':
+            modules = [MSCrossAttnBlock(n_levels=1, d_model=config.mm_hidden_size)]
+        elif config.layer_using_strategy == '3-18-23':
+            modules = [MSCrossAttnBlock(n_levels=2, d_model=config.mm_hidden_size)]
+        elif config.layer_using_strategy == 'former' or config.layer_using_strategy == 'latter':
+            modules = [MSCrossAttnBlock(n_levels=12, d_model=config.mm_hidden_size)]   
+        elif config.layer_using_strategy == 'all':
+            modules = [MSCrossAttnBlock(n_levels=24, d_model=config.mm_hidden_size)]   
+        else:
+            raise ValueError(
+                f"Unsupported layer_using_strategy={getattr(config, 'layer_using_strategy', None)!r} for layer_fusing_strategy='E_M'. "
+                "Use an explicit hidden_states index list (e.g. '20' or '3-18-23') or one of: '18', '3-18-23', 'former', 'latter', 'all'."
+            )
         modules.append(nn.Linear(config.mm_hidden_size, config.hidden_size))
         for _ in range(1, mlp_depth):
             modules.append(nn.GELU())

@@ -49,6 +49,7 @@ from transformers.utils import (
 )
 from transformers.utils.import_utils import is_torch_fx_available
 from .configuration_llama import LlamaConfig
+from ..multimodal_encoder.layer_select import parse_layer_using_strategy
 
 
 
@@ -64,6 +65,108 @@ if is_torch_fx_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+
+def _compute_injection_layer_indices(layer_using_strategy: Optional[str], *, num_hidden_layers: int) -> List[int]:
+    if not layer_using_strategy:
+        return []
+
+    parsed = parse_layer_using_strategy(layer_using_strategy)
+    if parsed is not None:
+        # For explicit lists, treat the last selected vision hidden_state as the final feature (mm_projector_f/input tokens).
+        # Only the preceding features are injected for I_D/I_M.
+        if len(parsed) <= 1:
+            return []
+        inject_layers = parsed[:-1]
+        # Map the (vision) layer_using_strategy indices onto decoder layer indices.
+        # Keep the legacy 24-base for typical CLIP-like configs, but allow larger explicit indices (e.g. SigLIP) by
+        # scaling relative to the max provided value.
+        base = max(24, max(max(parsed), 1))
+        indices: List[int] = []
+        for v in inject_layers:
+            v_eff = max(int(v), 1)
+            idx = int(v_eff * num_hidden_layers / base - 1)
+            if idx < 0:
+                idx = 0
+            elif idx >= num_hidden_layers:
+                idx = num_hidden_layers - 1
+            indices.append(idx)
+
+        # Ensure a 1:1 mapping between provided injection features and injection layers.
+        used = set()
+        unique: List[int] = []
+        for idx in indices:
+            candidate = idx
+            while candidate in used and candidate < num_hidden_layers - 1:
+                candidate += 1
+            while candidate in used and candidate > 0:
+                candidate -= 1
+            if candidate in used:
+                raise ValueError(
+                    f"Cannot assign {len(indices)} distinct injection layers within num_hidden_layers={num_hidden_layers} "
+                    f"for layer_using_strategy={layer_using_strategy!r}."
+                )
+            used.add(candidate)
+            unique.append(candidate)
+        return unique
+
+    if layer_using_strategy == '18':
+        return [int(18 * num_hidden_layers / 24 - 1)]
+    if layer_using_strategy == '3-18':
+        return [int(3 * num_hidden_layers / 24 - 1), int(18 * num_hidden_layers / 24 - 1)]
+    if layer_using_strategy == '3-18-23':
+        return [
+            int(3 * num_hidden_layers / 24 - 1),
+            int(18 * num_hidden_layers / 24 - 1),
+            int(23 * num_hidden_layers / 24 - 1),
+        ]
+    if layer_using_strategy == 'former':
+        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    if layer_using_strategy == 'latter':
+        return [
+            num_hidden_layers - 12,
+            num_hidden_layers - 11,
+            num_hidden_layers - 10,
+            num_hidden_layers - 9,
+            num_hidden_layers - 8,
+            num_hidden_layers - 7,
+            num_hidden_layers - 6,
+            num_hidden_layers - 5,
+            num_hidden_layers - 4,
+            num_hidden_layers - 3,
+            num_hidden_layers - 2,
+            num_hidden_layers - 1,
+        ]
+    if layer_using_strategy == 'all':
+        return [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            num_hidden_layers - 12,
+            num_hidden_layers - 11,
+            num_hidden_layers - 10,
+            num_hidden_layers - 9,
+            num_hidden_layers - 8,
+            num_hidden_layers - 7,
+            num_hidden_layers - 6,
+            num_hidden_layers - 5,
+            num_hidden_layers - 4,
+            num_hidden_layers - 3,
+            num_hidden_layers - 2,
+            num_hidden_layers - 1,
+        ]
+
+    return []
 
 _CONFIG_FOR_DOC = "LlamaConfig"
 
@@ -725,21 +828,13 @@ class LlamaDecoderLayer(nn.Module):
         self.layer_using_strategy = config.layer_using_strategy    
         self.layer_fusing_strategy = config.layer_fusing_strategy
         if self.layer_fusing_strategy in ("I_C", "I_C_SUM"):
-            self.has_cross = False   
+            self.has_cross = False
         elif "I" in self.layer_fusing_strategy:
-            if self.layer_using_strategy == '18':
-                self.has_cross = layer_idx in [int(18*config.num_hidden_layers/24-1)]
-            if self.layer_using_strategy == '3-18':
-                self.has_cross = layer_idx in [int(3*config.num_hidden_layers/24-1),int(18*config.num_hidden_layers/24-1)]    
-            if self.layer_using_strategy == '3-18-23':
-                self.has_cross = layer_idx in [int(3*config.num_hidden_layers/24-1),int(18*config.num_hidden_layers/24-1),int(23*config.num_hidden_layers/24-1)]
-            if self.layer_using_strategy == 'former':                 
-                self.has_cross = layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11]
-            if self.layer_using_strategy == 'latter':
-                self.has_cross = layer_idx in [config.num_hidden_layers - 12,config.num_hidden_layers - 11, config.num_hidden_layers - 10, config.num_hidden_layers - 9, config.num_hidden_layers - 8, config.num_hidden_layers - 7, config.num_hidden_layers - 6, config.num_hidden_layers - 5, config.num_hidden_layers - 4, config.num_hidden_layers - 3, config.num_hidden_layers - 2, config.num_hidden_layers - 1]
-
-            if self.layer_using_strategy == 'all':
-                self.has_cross = layer_idx in [0,1,2,3,4,5,6,7,8,9,10,11,config.num_hidden_layers - 12, config.num_hidden_layers - 11, config.num_hidden_layers - 10, config.num_hidden_layers - 9, config.num_hidden_layers - 8, config.num_hidden_layers - 7, config.num_hidden_layers - 6, config.num_hidden_layers - 5, config.num_hidden_layers - 4, config.num_hidden_layers - 3, config.num_hidden_layers - 2, config.num_hidden_layers - 1]
+            layer_indices = _compute_injection_layer_indices(
+                getattr(config, 'layer_using_strategy', None),
+                num_hidden_layers=config.num_hidden_layers,
+            )
+            self.has_cross = layer_idx in set(layer_indices)
         else:
             self.has_cross = False
 
@@ -1195,18 +1290,16 @@ class LlamaModel(LlamaPreTrainedModel):
                 
 
                 length = len(self.layers)
-                if self.layer_using_strategy == '18':
-                    layer_indices = [int(18*length/24-1)]
-                if self.layer_using_strategy == '3-18':
-                    layer_indices = [int(3*length/24-1),int(18*length/24-1)]    
-                if self.layer_using_strategy == '3-18-23':
-                    layer_indices = [int(3*length/24-1),int(18*length/24-1),int(23*length/24-1)]
-                if self.layer_using_strategy == 'former':                 
-                    layer_indices = [0,1,2,3,4,5,6,7,8,9,10,11]
-                if self.layer_using_strategy == 'latter':
-                    layer_indices = [length - 12,length - 11, length - 10, length - 9, length - 8, length - 7, length - 6, length - 5, length - 4, length - 3, length - 2, length - 1]
-                if self.layer_using_strategy == 'all':
-                    layer_indices = [0,1,2,3,4,5,6,7,8,9,10,11,length - 12, length - 11, length - 10, length - 9, length - 8, length - 7, length - 6, length - 5, length - 4, length - 3, length - 2, length - 1]
+                layer_indices = _compute_injection_layer_indices(
+                    getattr(self, 'layer_using_strategy', None),
+                    num_hidden_layers=length,
+                )
+
+                if images_features is None or len(images_features) < len(layer_indices):
+                    raise ValueError(
+                        f"images_features is missing or too short for {self.layer_fusing_strategy!r}: "
+                        f"need at least {len(layer_indices)} features, got {0 if images_features is None else len(images_features)}." 
+                    )
 
 
 

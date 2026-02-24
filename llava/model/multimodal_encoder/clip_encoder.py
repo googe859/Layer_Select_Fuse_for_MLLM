@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 from transformers import CLIPVisionModel, CLIPImageProcessor, CLIPVisionConfig
+from .layer_select import parse_layer_using_strategy
 
 
 class CLIPVisionTower(nn.Module):
@@ -38,23 +39,44 @@ class CLIPVisionTower(nn.Module):
     def feature_select(self, image_forward_outs):
 
         selected_features = []
-        if self.layer_using_strategy == '18':
-            select_layer = [18,23]
+
+        parsed_using = parse_layer_using_strategy(self.layer_using_strategy)
+        if parsed_using is not None:
+            select_layer = parsed_using
+        elif self.layer_using_strategy == '18':
+            select_layer = [18, 23]
         elif self.layer_using_strategy == '3-18':
-            select_layer = [3,18,23]    
+            select_layer = [3, 18, 23]
         elif self.layer_using_strategy == '3-18-23':
-            select_layer = [3,18,23,23]
-        elif self.layer_using_strategy == 'former':                 
-            select_layer = [1,2,3,4,5,6,7,8,9,10,11,12,23]
+            select_layer = [3, 18, 23, 23]
+        elif self.layer_using_strategy == 'former':
+            select_layer = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 23]
         elif self.layer_using_strategy == 'latter':
-            select_layer = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,23]
+            select_layer = [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 23]
         elif self.layer_using_strategy == 'all':
-            select_layer = [1,2,3,4,5,6,7,8,9,10,11,12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,23]
+            select_layer = [
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+                13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 23,
+            ]
         else:
-        # baseline：仅使用命令行指定的单层
+            # baseline: only use the single layer specified by the preset
             select_layer = [23]
+
+        hidden_states = getattr(image_forward_outs, 'hidden_states', None)
+        if hidden_states is None:
+            raise ValueError(
+                'No hidden_states available for vision feature selection (did you set output_hidden_states=True?).'
+            )
+        max_valid = len(hidden_states) - 1
+
         for layer_index in select_layer:
-            layer_features = image_forward_outs.hidden_states[layer_index]
+            if layer_index < 0 or layer_index > max_valid:
+                raise ValueError(
+                    f'Requested hidden_states[{layer_index}] via layer_using_strategy={self.layer_using_strategy!r}, '
+                    f'but vision tower returned {len(hidden_states)} hidden_states (valid range: 0..{max_valid}). '
+                    f'select_layer={select_layer}'
+                )
+            layer_features = hidden_states[layer_index]
             if self.select_feature == 'patch':
                 layer_features = layer_features[:, 1:]
             elif self.select_feature == 'cls_patch':
@@ -63,9 +85,8 @@ class CLIPVisionTower(nn.Module):
                 raise ValueError(f'Unexpected select feature: {self.select_feature}')
             selected_features.append(layer_features)
 
-
         return selected_features
-    
+
 
     def forward(self, images):
         image_features = []

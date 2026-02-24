@@ -10,6 +10,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 import os
+from .layer_select import parse_layer_using_strategy
 from transformers.image_processing_utils import BatchFeature, get_size_dict
 from transformers.image_transforms import (convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format, )
 from transformers.image_utils import (ChannelDimension, PILImageResampling, to_numpy_array, )
@@ -579,29 +580,37 @@ class SigLipVisionTower(nn.Module):
         self.is_loaded = True
 
     def feature_select(self, image_forward_outs):
-  
+
         selected_features = []
-        # For siglip, we only tested 3-18-23 and the latter
-        if self.layer_using_strategy == '3-18':
-            select_layer = [3,20,25]   
-        elif self.layer_using_strategy == '3-18-23':
-            select_layer = [3,20,25,25]    
-        elif self.layer_using_strategy == 'latter':
-            select_layer = [15,16, 17, 18, 19, 20, 21, 22, 23, 24,25,26,25]
-        elif self.layer_using_strategy == '18-23':
-            select_layer = [20, 25]    # layer 18, 23 + final layer for mm_projector_f
-        elif self.layer_using_strategy == '23-23':
-            select_layer = [25, 25]        # layer 23 + final layer for mm_projector_f
-        elif self.layer_using_strategy == 'baseline18':
-            select_layer = [20]        # 单层 baseline：使用第 20 层（对应 CLIP 第 18 层）
+
+        parsed_using = parse_layer_using_strategy(self.layer_using_strategy)
+        if parsed_using is not None:
+            select_layer = parsed_using
         else:
-        # baseline：仅使用命令行指定的单层
+            # SigLIP: avoid legacy logical->actual mappings; prefer explicit hidden_states indices
+            if self.layer_using_strategy in {'baseline18', 'former', 'latter', 'all'}:
+                raise ValueError(
+                    f"SigLIP legacy layer_using_strategy preset {self.layer_using_strategy!r} is not supported. "
+                    "Please specify explicit vision hidden_states indices, e.g. '20' or '3-18-23'. "
+                    "Note: these are hidden_states indices (hidden_states[0] is embeddings output)."
+                )
             select_layer = [25]
 
-
+        hidden_states = getattr(image_forward_outs, 'hidden_states', None)
+        if hidden_states is None:
+            raise ValueError(
+                'No hidden_states available for vision feature selection (did you set output_hidden_states=True?).'
+            )
+        max_valid = len(hidden_states) - 1
 
         for layer_index in select_layer:
-            layer_features = image_forward_outs.hidden_states[layer_index]
+            if layer_index < 0 or layer_index > max_valid:
+                raise ValueError(
+                    f'Requested hidden_states[{layer_index}] via layer_using_strategy={self.layer_using_strategy!r}, '
+                    f'but vision tower returned {len(hidden_states)} hidden_states (valid range: 0..{max_valid}). '
+                    f'select_layer={select_layer}'
+                )
+            layer_features = hidden_states[layer_index]
             if self.select_feature == 'patch':
                 layer_features = layer_features[:, 1:]
             elif self.select_feature == 'cls_patch':
@@ -611,9 +620,8 @@ class SigLipVisionTower(nn.Module):
             selected_features.append(layer_features)
 
         return selected_features
-    
 
-    # @torch.no_grad()
+
     def forward(self, images):
         if type(images) is list:
             image_features = []

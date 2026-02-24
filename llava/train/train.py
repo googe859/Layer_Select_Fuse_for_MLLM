@@ -13,6 +13,18 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+#
+# NOTE: This file is often executed as a *path* (e.g. llava/train/train.py) by DeepSpeed.
+# In that mode, Python's default sys.path[0] becomes .../llava/train, which can cause
+# import llava to resolve to an unrelated llava checkout or an installed package.
+# Ensure the repo root is on sys.path so imports are consistent with this checkout.
+import sys
+from pathlib import Path
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 from transformers import Trainer, TrainingArguments, TrainerCallback
 import os
 import copy
@@ -931,7 +943,13 @@ def train(attn_implementation=None):
         if model_args.tune_mm_mlp_adapter:
             model.requires_grad_(False)
             if "I" in model.config.layer_fusing_strategy:
-                for idx, projector in enumerate(model.get_model().mm_projectors):
+                mm_projectors = getattr(model.get_model(), "mm_projectors", None)
+                if mm_projectors is None:
+                    raise ValueError(
+                        "Fusion strategy includes 'I' but model has no mm_projectors. "
+                        "This usually means vision modules were not initialized with the correct layer_using_strategy."
+                    )
+                for idx, projector in enumerate(mm_projectors):
                     projector.to(dtype=compute_dtype, device=training_args.device)
                     for name, param in projector.named_parameters():
                         param.requires_grad = True
@@ -968,7 +986,13 @@ def train(attn_implementation=None):
         if training_args.bits in [4, 8]:
 
 
-            for idx, projector in enumerate(model.get_model().mm_projectors):
+            mm_projectors = getattr(model.get_model(), "mm_projectors", None)
+            if mm_projectors is None:
+                raise ValueError(
+                    "Fusion strategy includes 'I' but model has no mm_projectors. "
+                    "This usually means vision modules were not initialized with the correct layer_using_strategy."
+                )
+            for idx, projector in enumerate(mm_projectors):
                 projector.to(dtype=compute_dtype, device=training_args.device)
 
             model.get_model().mm_projector_f.to(dtype=compute_dtype, device=training_args.device)

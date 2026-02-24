@@ -20,6 +20,7 @@ import torch.nn as nn
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
+from .multimodal_encoder.layer_select import parse_layer_using_strategy
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
@@ -34,21 +35,28 @@ class LlavaMetaModel:
         if hasattr(config, "mm_vision_tower"):
             self.vision_tower = build_vision_tower(config, delay_load=True)
             if "I" in self.config.layer_fusing_strategy:
-                if self.config.layer_using_strategy == 'former' or self.config.layer_using_strategy == 'latter':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(12)])
-                elif self.config.layer_using_strategy == 'all':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(24)])
-                elif self.config.layer_using_strategy == '3-18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
-                elif self.config.layer_using_strategy == '18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
-                elif self.config.layer_using_strategy == '23-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
-                elif self.config.layer_using_strategy == '3-18':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
-                elif self.config.layer_using_strategy == '18':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
+                parsed_using = parse_layer_using_strategy(getattr(self.config, 'layer_using_strategy', None))
+                if parsed_using is not None:
+                    n_projectors = max(len(parsed_using) - 1, 0)
+                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(n_projectors)])
+                else:
+                    if self.config.layer_using_strategy == 'former' or self.config.layer_using_strategy == 'latter':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(12)])
+                    elif self.config.layer_using_strategy == 'all':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(24)])
+                    elif self.config.layer_using_strategy == '3-18-23':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
+                    elif self.config.layer_using_strategy == '18-23':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
+                    elif self.config.layer_using_strategy == '23-23':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
+                    elif self.config.layer_using_strategy == '3-18':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
+                    elif self.config.layer_using_strategy == '18':
+                        self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
 
+                if getattr(self, 'mm_projectors', None) is None:
+                    self.mm_projectors = nn.ModuleList()
             self.mm_projector_f = build_vision_projector(config, vision_tower=self.vision_tower)
 
             if 'unpad' in getattr(config, 'mm_patch_merge_type', ''):
@@ -96,36 +104,39 @@ class LlavaMetaModel:
         self.config.mm_vision_select_feature = mm_vision_select_feature
         self.config.mm_patch_merge_type = mm_patch_merge_type
 
-        if getattr(self, 'mm_projectors', None) is None:
-            if "I" in self.config.layer_fusing_strategy:
+        expected_projectors = 0
+        if "I" in self.config.layer_fusing_strategy:
+            parsed_using = parse_layer_using_strategy(getattr(self.config, 'layer_using_strategy', None))
+            if parsed_using is not None:
+                expected_projectors = max(len(parsed_using) - 1, 0)
+            else:
                 if self.config.layer_using_strategy == 'former' or self.config.layer_using_strategy == 'latter':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(12)])
+                    expected_projectors = 12
                 elif self.config.layer_using_strategy == 'all':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(24)])
+                    expected_projectors = 24
                 elif self.config.layer_using_strategy == '3-18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(3)])
-                elif self.config.layer_using_strategy == '18-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
-                elif self.config.layer_using_strategy == '23-23':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
+                    expected_projectors = 3
                 elif self.config.layer_using_strategy == '3-18':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(2)])
-                elif self.config.layer_using_strategy == '18':
-                    self.mm_projectors = nn.ModuleList([build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(1)])
+                    expected_projectors = 2
+                elif self.config.layer_using_strategy in {'18', '18-23', '23-23'}:
+                    expected_projectors = 1
+                else:
+                    expected_projectors = 0
+
+        current_projectors = getattr(self, 'mm_projectors', None)
+        if current_projectors is None or len(current_projectors) != expected_projectors:
+            self.mm_projectors = nn.ModuleList(
+                [build_vision_projector(self.config, vision_tower=self.vision_tower) for _ in range(expected_projectors)]
+            )
+
+        if getattr(self, 'mm_projector_f', None) is None:
             self.mm_projector_f = build_vision_projector(self.config, vision_tower=self.vision_tower)
-            if 'unpad' in mm_patch_merge_type:
-                embed_std = 1 / torch.sqrt(torch.tensor(self.config.hidden_size, dtype=self.dtype))
-                self.image_newline = nn.Parameter(
-                    torch.randn(self.config.hidden_size, dtype=self.dtype) * embed_std
-                )
-        else:
-            for idx, projector in enumerate(self.mm_projectors):
-                for name, param in projector.named_parameters():
-                    param.requires_grad = True
-                    print(f"Enabled grad for mm_projectors[{idx}]: {name}")
-            for name, param in self.mm_projector_f.named_parameters():
-                param.requires_grad = True
-                print(f"Enabled grad for mm_projector_f: {name}")
+
+        if 'unpad' in mm_patch_merge_type and getattr(self, 'image_newline', None) is None:
+            embed_std = 1 / torch.sqrt(torch.tensor(self.config.hidden_size, dtype=self.dtype))
+            self.image_newline = nn.Parameter(
+                torch.randn(self.config.hidden_size, dtype=self.dtype) * embed_std
+            )
 
         if pretrain_mm_mlp_adapter is not None:
             def get_w(weights, keyword):
@@ -185,6 +196,7 @@ class LlavaMetaForCausalLM(ABC):
 
     def encode_images(self, images):
         selected_features = self.get_vision_tower()(images)
+        parsed_using = parse_layer_using_strategy(getattr(self.config, 'layer_using_strategy', None))
         if self.config.layer_fusing_strategy == "E_M":
             image_features_f = self.get_model().mm_projector_f(selected_features)      
             return image_features_f      
@@ -198,6 +210,15 @@ class LlavaMetaForCausalLM(ABC):
             # Yao, H., Wu, W., Yang, T., Song, Y., Zhang, M., Feng, H., ... & Wang, J. (2024).
             # "Dense Connector for MLLMs." arXiv preprint arXiv:2405.13800.
             # Available at: https://arxiv.org/abs/2405.13800
+
+            if parsed_using is not None:
+                if not isinstance(selected_features, (list, tuple)) or len(selected_features) == 0:
+                    raise ValueError(
+                        f"Expected a non-empty list of selected vision features for E_D, got {type(selected_features)}"
+                    )
+                image_features_f = self.get_model().mm_projector_f(torch.cat(list(selected_features), dim=-1))
+                return image_features_f
+
             image_features = []
             image_features_2 = []
             if self.config.layer_using_strategy in ('18', '18-23', '23-23'):
@@ -224,6 +245,17 @@ class LlavaMetaForCausalLM(ABC):
         
         else:
             image_features = []
+
+            if len(selected_features) > 1:
+                mm_projectors = getattr(self.get_model(), 'mm_projectors', None)
+                required = len(selected_features) - 1
+                if mm_projectors is None or len(mm_projectors) < required:
+                    raise ValueError(
+                        f"Selected {len(selected_features)} vision features, but mm_projectors is missing or too small "
+                        f"for fusion strategy {self.config.layer_fusing_strategy!r}. "
+                        "For multi-layer vision features, use an internal fusion strategy (I_C/I_C_SUM/I_D/I_M) "
+                        "or select a single layer."
+                    )
 
             for idx, feature in enumerate(selected_features[:-1]):
                 image_features.append(self.get_model().mm_projectors[idx](feature))

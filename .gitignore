@@ -6,7 +6,7 @@ wandb/
 
 # Logs and run outputs
 *.log
-
+logs/*
 # Python cache & metadata
 __pycache__/
 *.egg-info/
