@@ -45,12 +45,35 @@ FINETUNE_IMAGE_FOLDER="/home/share/llava1.5/ft"
 
 export WANDB_MODE=offline
 
-PRETRAIN_OUT="./checkpoint/${BASE_MODEL_NAME}-${FUSING_STRATEGY}-pretrain-${USING_STRATEGY}-${MODEL_NAME}"
-FINETUNE_OUT="./checkpoint/${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME}"
+deepspeed_include_train="localhost:0,1,2,3,4,5,6,7"
+per_device_train_bs=4
+gradient_accumulation_steps_train=1
+learning_rate_train=1e-3
+weight_decay_train=5e-2
+model_max_length_train=3072
+warmup_steps_train=200
+max_steps_train=-1
+gradient_checkpointing_train=True
+
+deepspeed_include_finetune="localhost:0,1,2,3,4,5,6,7"
+per_device_finetune_bs=8
+gradient_accumulation_steps_finetune=1
+learning_rate_finetune=2e-6
+weight_decay_finetune=0.
+model_max_length_finetune=3072
+warmup_ratio_finetune=0.03
+max_steps_finetune=-1
+gradient_checkpointing_finetune=True
+
+pretrain_tag="bs${per_device_train_bs}-ga${gradient_accumulation_steps_train}-lr${learning_rate_train}-wd${weight_decay_train}-ml${model_max_length_train}-ws${warmup_steps_train}-ms${max_steps_train}-gc${gradient_checkpointing_train}-${deepspeed_include_train}"
+finetune_tag="bs${per_device_finetune_bs}-ga${gradient_accumulation_steps_finetune}-lr${learning_rate_finetune}-wd${weight_decay_finetune}-ml${model_max_length_finetune}-wr${warmup_ratio_finetune}-ms${max_steps_finetune}-gc${gradient_checkpointing_finetune}-${deepspeed_include_finetune}"
+
+PRETRAIN_OUT="./checkpoint/${BASE_MODEL_NAME}-${FUSING_STRATEGY}-pretrain-${USING_STRATEGY}-${MODEL_NAME}-${pretrain_tag}"
+FINETUNE_OUT="./checkpoint/${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME}-${finetune_tag}"
 
 # Pretraining
 
-deepspeed --include localhost:0,1,2,3,4,5,6,7 "${TRAIN_SCRIPT}" \
+deepspeed --include "${deepspeed_include_train}" "${TRAIN_SCRIPT}" \
     --deepspeed "${DEEPSPEED_CONFIG}" \
     --model_name_or_path "${MODEL_PATH}" \
     --version plain \
@@ -67,22 +90,22 @@ deepspeed --include localhost:0,1,2,3,4,5,6,7 "${TRAIN_SCRIPT}" \
     --bf16 True \
     --output_dir "${PRETRAIN_OUT}" \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 4 \
+    --per_device_train_batch_size "${per_device_train_bs}" \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 1 \
+    --gradient_accumulation_steps "${gradient_accumulation_steps_train}" \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 500 \
-    --max_steps -1 \
+    --max_steps "${max_steps_train}" \
     --save_total_limit 4 \
-    --learning_rate 1e-3 \
-    --weight_decay 5e-2 \
-    --warmup_steps 200 \
+    --learning_rate "${learning_rate_train}" \
+    --weight_decay "${weight_decay_train}" \
+    --warmup_steps "${warmup_steps_train}" \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --model_max_length 3072 \
-    --gradient_checkpointing True \
+    --model_max_length "${model_max_length_train}" \
+    --gradient_checkpointing "${gradient_checkpointing_train}" \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
@@ -90,7 +113,7 @@ deepspeed --include localhost:0,1,2,3,4,5,6,7 "${TRAIN_SCRIPT}" \
 
 # Fine-tuning
 
-deepspeed --include localhost:0,1,2,3,4,5,6,7 "${TRAIN_SCRIPT}" \
+deepspeed --include "${deepspeed_include_finetune}" "${TRAIN_SCRIPT}" \
     --deepspeed "${DEEPSPEED_CONFIG}" \
     --model_name_or_path "${MODEL_PATH}" \
     --version v1 \
@@ -109,22 +132,22 @@ deepspeed --include localhost:0,1,2,3,4,5,6,7 "${TRAIN_SCRIPT}" \
     --bf16 True \
     --output_dir "${FINETUNE_OUT}" \
     --num_train_epochs 1 \
-    --per_device_train_batch_size 8 \
+    --per_device_train_batch_size "${per_device_finetune_bs}" \
     --per_device_eval_batch_size 4 \
-    --gradient_accumulation_steps 1 \
+    --gradient_accumulation_steps "${gradient_accumulation_steps_finetune}" \
     --evaluation_strategy "no" \
     --save_strategy "steps" \
     --save_steps 1000 \
-    --max_steps -1 \
+    --max_steps "${max_steps_finetune}" \
     --save_total_limit 5 \
-    --learning_rate 2e-6 \
-    --weight_decay 0. \
-    --warmup_ratio 0.03 \
+    --learning_rate "${learning_rate_finetune}" \
+    --weight_decay "${weight_decay_finetune}" \
+    --warmup_ratio "${warmup_ratio_finetune}" \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
     --tf32 True \
-    --model_max_length 3072 \
-    --gradient_checkpointing True \
+    --model_max_length "${model_max_length_finetune}" \
+    --gradient_checkpointing "${gradient_checkpointing_finetune}" \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
