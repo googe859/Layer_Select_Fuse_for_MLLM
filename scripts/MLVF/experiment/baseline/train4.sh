@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 set -euo pipefail
 
 # Ensure we import the local repo `llava` package (avoid picking up an unrelated installed one).
@@ -23,7 +22,7 @@ DEEPSPEED_CONFIG="${REPO_ROOT}/scripts/zero2.json"
 
 # Define common variables
 FUSING_STRATEGY="E_D" # Options: E_D, E_M, I_D, I_M
-USING_STRATEGY="3-18-23" # Options: 18, 3-18, 3-18-23, former, latter, all
+USING_STRATEGY="3-20-25" # Options: 18, 3-18, 3-18-23, former, latter, all
 MODEL_NAME="siglip_14_665k" # Specific model name, {Vsiual Encoder}_{LLM size}_{data size}
 
 # Define paths
@@ -35,7 +34,7 @@ VISION_TOWER="/home/share/llava1.5/model/siglip-so400m-patch14-384"
 
 FINETUNE_DATA_PATH="/home/share/llava1.5/ft/llava_v1_5_mix665k_minitextvqa.json"
 FINETUNE_IMAGE_FOLDER="/home/share/llava1.5/ft"
-
+BASE_MODEL_NAME=MobileLLaMA-1.4B-Base
 
 deepspeed_include_train="localhost:0,1,2,3,4,5,6,7"
 per_device_train_bs=2
@@ -101,7 +100,7 @@ deepspeed --include "${deepspeed_include_train}" "${TRAIN_SCRIPT}" \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
-    --wandb_name "${BASE_MODEL_NAME}-${FUSING_STRATEGY}-pretrain-${USING_STRATEGY}-${MODEL_NAME}"
+    --wandb_name "${BASE_MODEL_NAME}-${FUSING_STRATEGY}-pretrain-${USING_STRATEGY}-${MODEL_NAME}-${pretrain_tag}"
 
 # Fine-tuning
 
@@ -143,4 +142,4 @@ deepspeed --include "${deepspeed_include_finetune}" "${TRAIN_SCRIPT}" \
     --dataloader_num_workers 4 \
     --lazy_preprocess True \
     --report_to wandb \
-    --wandb_name "${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME}"
+    --wandb_name "${BASE_MODEL_NAME}-${FUSING_STRATEGY}-finetune-${USING_STRATEGY}-${MODEL_NAME}-${finetune_tag}"
